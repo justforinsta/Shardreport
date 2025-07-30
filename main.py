@@ -40,7 +40,6 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------- Inputs ----------
 st.title("📱 Instagram Report Viewer")
 st.caption("Enter your sessionid + csrftoken to see your report history.")
 
@@ -48,13 +47,13 @@ sessionid = st.text_input("🍪 Session ID", type="password")
 csrftoken = st.text_input("🔐 CSRF Token", type="password")
 
 # ---------- Scraper ----------
-def fetch_and_parse_reports(sessionid, csrftoken):
+def fetch_and_parse_requests(sessionid, csrftoken):
     headers = {
         "User-Agent": "Mozilla/5.0",
         "X-CSRFToken": csrftoken,
         "Cookie": f"sessionid={sessionid}; csrftoken={csrftoken};"
     }
-    url = "https://www.instagram.com/support/reports/"
+    url = "https://www.instagram.com/support/requests/"
 
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
@@ -65,30 +64,23 @@ def fetch_and_parse_reports(sessionid, csrftoken):
 
     try:
         data = json.loads(script_tag.string)
-        raw_reports = data["props"]["pageProps"]["reportHistory"]
+        raw_reports = data["props"]["pageProps"].get("data", {}).get("content", [])
     except Exception as e:
         print("Parsing error:", e)
         return []
 
     reports = []
-    for rep in raw_reports:
-        reported_user = rep.get("reportedAccount", "unknown_user")
-        reason = rep.get("reportReason", "Unknown")
-        status = rep.get("status", "open")
-        date_raw = rep.get("date", "")
-        try:
-            date_fmt = datetime.strptime(date_raw, "%Y-%m-%dT%H:%M:%SZ")
-            date_str = date_fmt.strftime("%B %d, %Y")
-        except:
-            date_str = "Unknown Date"
-
-        msg = rep.get("body", "Your report was received.")
+    for item in raw_reports:
+        body = item.get("body", "")
+        header = item.get("header", "")
+        status = "closed" if "removed" in body.lower() else "open"
+        reported_user = item.get("title", "unknown")
         reports.append({
             "username": reported_user,
-            "reason": reason,
+            "reason": header,
             "status": status,
-            "description": msg,
-            "date": date_str,
+            "description": body,
+            "date": "Unknown",
             "avatar": "https://i.imgur.com/xZzVMpD.png"
         })
 
@@ -100,7 +92,7 @@ if st.button("Fetch Reports"):
         st.error("Both fields are required.")
     else:
         with st.spinner("Fetching your reports from Instagram..."):
-            reports = fetch_and_parse_reports(sessionid, csrftoken)
+            reports = fetch_and_parse_requests(sessionid, csrftoken)
 
             if not reports:
                 st.warning("No reports found or session expired.")
