@@ -3,13 +3,13 @@ import requests
 from bs4 import BeautifulSoup
 from PIL import Image
 from io import BytesIO
+import os
 
 st.set_page_config(page_title="Instagram Report Viewer", layout="centered")
 
 # ---------- CSS Styling ----------
 st.markdown("""
     <style>
-    body { background-color: #000; color: #fff; }
     .report-box {
         background-color: #111;
         border-radius: 10px;
@@ -39,15 +39,12 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
-# ---------- App Title ----------
 st.title("📱 Instagram Report Viewer")
-st.caption("Enter your Instagram sessionid and csrftoken to view reports you've submitted.")
+st.caption("Use your `sessionid` and `csrftoken` to load report history.")
 
-# ---------- User Input ----------
 sessionid = st.text_input("🍪 Session ID", type="password")
 csrftoken = st.text_input("🔐 CSRF Token", type="password")
 
-# ---------- Scrape Reports Page ----------
 def get_reports_html(sessionid, csrftoken):
     session = requests.Session()
     session.cookies.set("sessionid", sessionid, domain=".instagram.com")
@@ -61,9 +58,13 @@ def get_reports_html(sessionid, csrftoken):
     
     if "Log in" in r.text or "login" in r.url:
         return None
+    
+    # Save HTML for debugging
+    with open("debug_instagram_support.html", "w", encoding="utf-8") as f:
+        f.write(r.text)
+    
     return r.text
 
-# ---------- Parse Reports Loosely ----------
 def parse_reports(html):
     soup = BeautifulSoup(html, "html.parser")
     divs = soup.find_all("div")
@@ -87,10 +88,9 @@ def parse_reports(html):
             })
     return reports
 
-# ---------- Main Action ----------
 if st.button("Fetch Reports"):
     if not sessionid or not csrftoken:
-        st.error("Please enter both sessionid and csrftoken.")
+        st.error("Please enter both values.")
     else:
         with st.spinner("🔍 Fetching reports..."):
             html = get_reports_html(sessionid, csrftoken)
@@ -98,14 +98,16 @@ if st.button("Fetch Reports"):
             if html is None:
                 st.error("❌ Session invalid or login expired. Try with a new sessionid.")
             else:
+                st.success("✅ HTML saved as `debug_instagram_support.html`. Open it to inspect.")
+
                 report_data = parse_reports(html)
 
                 if not report_data:
-                    st.info("No reports found on your account.")
+                    st.warning("No reports matched in HTML. Please upload `debug_instagram_support.html`.")
                 else:
                     for report in report_data:
                         st.markdown('<div class="report-box">', unsafe_allow_html=True)
-                        st.markdown(f'<div class="status-banner">Closed</div>', unsafe_allow_html=True)
+                        st.markdown(f'<div class="status-banner">{report["status"].capitalize()}</div>', unsafe_allow_html=True)
                         
                         col1, col2 = st.columns([1, 6])
                         with col1:
